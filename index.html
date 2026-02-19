@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Pertussis Comparison</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  body { font-family: monospace; background: #f5f2eb; padding: 32px; max-width: 800px; margin: auto; }
+  h2 { margin-bottom: 4px; }
+  .sub { color: #888; font-size: 12px; margin-bottom: 20px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  label {
+    display: block; background: #fff; border: 2px dashed #ccc; border-radius: 10px;
+    padding: 18px; text-align: center; cursor: pointer; font-size: 12px; color: #666;
+    transition: border-color .2s;
+  }
+  label:hover { border-color: #888; }
+  label.a.ok { border-color: #0077cc; color: #0077cc; }
+  label.b.ok { border-color: #cc2244; color: #cc2244; }
+  input[type=file] { display: none; }
+  canvas { background: #fff; border-radius: 10px; padding: 12px; width: 100% !important; }
+  .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 16px; }
+  .s { background:#fff; border-radius:8px; padding:12px; font-size:11px; }
+  .s b { display:block; font-size:22px; }
+  .s.a b { color:#0077cc; } .s.b b { color:#cc2244; }
+</style>
+</head>
+<body>
+<h2>Pertussis · CSV Comparison</h2>
+<div class="sub">อัปโหลด 2 ไฟล์ CSV ที่มี column: year, patients</div>
+
+<div class="row">
+  <label class="a" id="la">📂 ไฟล์แรก (น้ำเงิน)<input type="file" accept=".csv" onchange="load(event,'a')"></label>
+  <label class="b" id="lb">📂 ไฟล์ที่สอง (แดง)<input type="file" accept=".csv" onchange="load(event,'b')"></label>
+</div>
+
+<div class="stats" id="stats"></div>
+<canvas id="chart" height="100" style="display:none"></canvas>
+
+<script>
+let D = {}, ch;
+function load(e, k) {
+  const f = e.target.files[0];
+  new Response(f).text().then(t => {
+    const rows = t.replace(/^\uFEFF/,'').trim().split(/\r?\n/);
+    const h = rows[0].toLowerCase().split(',');
+    const yi = h.findIndex(c=>c.includes('year')), pi = h.findIndex(c=>/patient|case|count|total/.test(c));
+    D[k] = { name: f.name.replace('.csv',''), rows: rows.slice(1).map(r=>r.split(',')).map(c=>({year:+c[yi],pat:+c[pi]})).sort((a,b)=>a.year-b.year) };
+    document.getElementById('l'+k).textContent = '✓ ' + D[k].name;
+    document.getElementById('l'+k).classList.add('ok');
+    if (D.a && D.b) render();
+  });
+}
+function render() {
+  const years = [...new Set([...D.a.rows,...D.b.rows].map(r=>r.year))].sort((a,b)=>a-b);
+  const val = (k,y) => D[k].rows.find(r=>r.year===y)?.pat ?? null;
+  const sum = k => D[k].rows.reduce((s,r)=>s+r.pat,0);
+  const peak = k => D[k].rows.reduce((m,r)=>r.pat>m.pat?r:m, D[k].rows[0]);
+  document.getElementById('stats').innerHTML = ['a','b'].map(k=>`
+    <div class="s ${k}"><div>${D[k].name} Total</div><b>${sum(k).toLocaleString()}</b></div>
+    <div class="s ${k}"><div>Peak</div><b>${peak(k).pat}</b><span style="font-size:10px;color:#aaa">ปี ${peak(k).year}</span></div>
+  `).join('');
+  const cv = document.getElementById('chart');
+  cv.style.display = 'block';
+  if (ch) ch.destroy();
+  ch = new Chart(cv, {
+    type:'line',
+    data:{ labels:years, datasets:[
+      {label:D.a.name, data:years.map(y=>val('a',y)), borderColor:'#0077cc', backgroundColor:'rgba(0,119,204,0.08)', fill:true, tension:.35, pointRadius:4, borderWidth:2},
+      {label:D.b.name, data:years.map(y=>val('b',y)), borderColor:'#cc2244', backgroundColor:'rgba(204,34,68,0.08)', fill:true, tension:.35, pointRadius:4, borderWidth:2}
+    ]},
+    options:{ plugins:{tooltip:{mode:'index',intersect:false}}, scales:{y:{beginAtZero:true}} }
+  });
+}
+</script>
+</body>
+</html>
